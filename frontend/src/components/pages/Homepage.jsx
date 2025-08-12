@@ -1,15 +1,13 @@
 import React from 'react';
 import './homepage.css';
 
-const Homepage = () => {
+const Homepage = ({ onNavigation }) => {
   const handleCarComparison = () => {
-    // You can add your logic here later
-    console.log('Car Comparison clicked');
+    onNavigation('compare');
   };
 
   const handlePriceEstimator = () => {
-    // You can add your logic here later
-    console.log('Price Estimator clicked');
+    onNavigation('price-estimator');
   };
 
   return (
