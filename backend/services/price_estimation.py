@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 from ..models.schemas import PriceEstimateRequest, PriceEstimateResponse, CarDetails
 from ..utils.prompts import CAR_PRICE_ESTIMATION_PROMPT
 
+# Load environment variables
 load_dotenv()
 
 class PriceEstimationService:
@@ -87,50 +88,108 @@ class PriceEstimationService:
         return "\n".join(details)
     
     def _extract_price_range(self, text: str) -> dict:
-        """Extract minimum and maximum price range - fixed to avoid Pydantic errors"""
+        """Extract minimum and maximum price range with improved currency detection"""
         try:
-            # Look for the exact format we specified in the prompt
-            min_pattern = r'Minimum Value:\s*([₹$€£¥C\$A\$]?[\d,]+)'
-            max_pattern = r'Maximum Value:\s*([₹$€£¥C\$A\$]?[\d,]+)'
+            print(f"Extracting price range from text: {text[:500]}...")  # Debug log
             
-            min_match = re.search(min_pattern, text, re.IGNORECASE)
-            max_match = re.search(max_pattern, text, re.IGNORECASE)
+            # Enhanced patterns for multi-character currencies
+            min_patterns = [
+                r'Minimum Value:\s*(C\$[\d,]+)',    # Canadian Dollar
+                r'Minimum Value:\s*(A\$[\d,]+)',    # Australian Dollar
+                r'Minimum Value:\s*([₹$€£¥][\d,]+)' # Other currencies
+            ]
             
-            if min_match and max_match:
-                min_price_str = min_match.group(1).strip()
-                max_price_str = max_match.group(1).strip()
+            max_patterns = [
+                r'Maximum Value:\s*(C\$[\d,]+)',    # Canadian Dollar
+                r'Maximum Value:\s*(A\$[\d,]+)',    # Australian Dollar
+                r'Maximum Value:\s*([₹$€£¥][\d,]+)' # Other currencies
+            ]
+            
+            min_price_str = None
+            max_price_str = None
+            
+            # Try each pattern until we find a match
+            for pattern in min_patterns:
+                min_match = re.search(pattern, text, re.IGNORECASE)
+                if min_match:
+                    min_price_str = min_match.group(1).strip()
+                    break
+            
+            for pattern in max_patterns:
+                max_match = re.search(pattern, text, re.IGNORECASE)
+                if max_match:
+                    max_price_str = max_match.group(1).strip()
+                    break
+            
+            if min_price_str and max_price_str:
+                print(f"Found min: {min_price_str}, max: {max_price_str}")  # Debug log
                 
-                # Extract numeric values only (remove currency symbols and commas)
-                min_numeric = float(re.sub(r'[₹$€£¥C\$A\$,\s]', '', min_price_str))
-                max_numeric = float(re.sub(r'[₹$€£¥C\$A\$,\s]', '', max_price_str))
+                # Extract numeric values for calculations
+                min_numeric = float(re.sub(r'[₹$€£¥CA,\s]', '', min_price_str))
+                max_numeric = float(re.sub(r'[₹$€£¥CA,\s]', '', max_price_str))
+                
+                # Detect currency
+                if min_price_str.startswith('C$'):
+                    currency = 'C$'
+                elif min_price_str.startswith('A$'):
+                    currency = 'A$'
+                elif min_price_str.startswith('₹'):
+                    currency = '₹'
+                elif min_price_str.startswith('€'):
+                    currency = '€'
+                elif min_price_str.startswith('£'):
+                    currency = '£'
+                elif min_price_str.startswith('¥'):
+                    currency = '¥'
+                else:
+                    currency = '$'
                 
                 return {
-                    "min": min_numeric,  # Numeric value for calculations
-                    "max": max_numeric,  # Numeric value for calculations
-                    "min_display": min_price_str,  # Formatted string for display
-                    "max_display": max_price_str   # Formatted string for display
+                    "min": min_numeric,
+                    "max": max_numeric,
+                    "min_display": min_price_str,
+                    "max_display": max_price_str,
+                    "currency_detected": currency
                 }
             
-            # Fallback: look for any price patterns and sort them
-            price_patterns = [
-                r'([₹$€£¥][\d,]+)',
-                r'(\$[\d,]+)',
-                r'(₹[\d,]+)',
-                r'(€[\d,]+)',
-                r'(£[\d,]+)'
+            # Enhanced fallback: look for any currency patterns in order of preference
+            currency_patterns = [
+                (r'C\$[\d,]+', 'C$'),  # Canadian Dollar - check first
+                (r'A\$[\d,]+', 'A$'),  # Australian Dollar - check second  
+                (r'₹[\d,]+', '₹'),     # Indian Rupee
+                (r'€[\d,]+', '€'),     # Euro
+                (r'£[\d,]+', '£'),     # British Pound
+                (r'¥[\d,]+', '¥'),     # Japanese Yen
+                (r'\$[\d,]+', '$'),    # US Dollar - check last to avoid conflicts
             ]
             
             all_prices = []
-            for pattern in price_patterns:
+            detected_currency = '$'  # Default
+            
+            for pattern, currency in currency_patterns:
                 matches = re.findall(pattern, text)
-                for match in matches:
-                    # Clean numeric value for sorting
-                    numeric_value = float(re.sub(r'[₹$€£¥,\s]', '', match))
-                    if numeric_value > 0:  # Only valid prices
-                        all_prices.append({
-                            "text": match,
-                            "value": numeric_value
-                        })
+                if matches:
+                    detected_currency = currency
+                    for match in matches:
+                        # Extract numeric value properly for multi-char currencies
+                        if currency in ['C$', 'A$']:
+                            numeric_str = re.sub(r'[CA$,\s]', '', match)
+                        else:
+                            numeric_str = re.sub(r'[₹$€£¥,\s]', '', match)
+                        
+                        try:
+                            numeric_value = float(numeric_str)
+                            if numeric_value > 0:
+                                all_prices.append({
+                                    "text": match,
+                                    "value": numeric_value
+                                })
+                        except ValueError:
+                            continue
+                    
+                    # If we found prices with this currency, stop looking
+                    if all_prices:
+                        break
             
             if len(all_prices) >= 2:
                 # Sort by numeric value
@@ -139,41 +198,63 @@ class PriceEstimationService:
                 return {
                     "min": all_prices[0]["value"],
                     "max": all_prices[-1]["value"],
-                    "min_display": all_prices["text"],
-                    "max_display": all_prices[-1]["text"]
+                    "min_display": all_prices[0]["text"],
+                    "max_display": all_prices[-1]["text"],
+                    "currency_detected": detected_currency
                 }
-            
+            elif len(all_prices) == 1:
+                # Single price found
+                price = all_prices[0]
+                return {
+                    "min": price["value"],
+                    "max": price["value"],
+                    "min_display": price["text"],
+                    "max_display": price["text"],
+                    "currency_detected": detected_currency
+                }
+                
         except Exception as e:
             print(f"Error extracting price range: {e}")
         
-        # Return default values if parsing fails
+        # Return safe default values
         return {
             "min": 0, 
             "max": 0,
-            "min_display": "Not available",
-            "max_display": "Not available"
+            "min_display": "",
+            "max_display": "",
+            "currency_detected": "$"
         }
     
     def _extract_estimated_price(self, text: str) -> str:
         """Extract the most likely price"""
-        # Look for "Most Likely Price" first
-        likely_pattern = r'Most Likely Price:\s*([₹$€£¥C\$A\$]?[\d,]+)'
-        likely_match = re.search(likely_pattern, text, re.IGNORECASE)
-        
-        if likely_match:
-            return likely_match.group(1).strip()
-        
-        # Fallback to any price found
-        price_patterns = [
-            r'([₹$€£¥][\d,]+)',
-            r'(\$[\d,]+)',
-            r'(₹[\d,]+)'
-        ]
-        
-        for pattern in price_patterns:
-            match = re.search(pattern, text)
-            if match:
-                return match.group(1).strip()
+        try:
+            # Look for "Most Likely Price" first
+            likely_patterns = [
+                r'Most Likely Price:\s*(C\$[\d,]+)',    # Canadian Dollar
+                r'Most Likely Price:\s*(A\$[\d,]+)',    # Australian Dollar
+                r'Most Likely Price:\s*([₹$€£¥][\d,]+)' # Other currencies
+            ]
+            
+            for pattern in likely_patterns:
+                likely_match = re.search(pattern, text, re.IGNORECASE)
+                if likely_match:
+                    return likely_match.group(1).strip()
+            
+            # Fallback to any price found - prioritize multi-character currencies
+            price_patterns = [
+                r'(C\$[\d,]+)',      # Canadian Dollar
+                r'(A\$[\d,]+)',      # Australian Dollar
+                r'([₹€£¥][\d,]+)',   # Other currencies
+                r'(\$[\d,]+)',       # US Dollar (last to avoid conflicts)
+            ]
+            
+            for pattern in price_patterns:
+                match = re.search(pattern, text)
+                if match:
+                    return match.group(1).strip()
+            
+        except Exception as e:
+            print(f"Error extracting estimated price: {e}")
         
         return "Price estimate included in analysis"
     
@@ -181,19 +262,52 @@ class PriceEstimationService:
         """Extract key factors affecting price"""
         factors = {}
         
-        # Look for the KEY PRICING FACTORS section
-        factors_section_match = re.search(r'\*\*KEY PRICING FACTORS:\*\*(.*?)(?:\*\*|$)', text, re.DOTALL | re.IGNORECASE)
+        try:
+            # Look for the KEY PRICING FACTORS section
+            factors_section_match = re.search(r'\*\*KEY PRICING FACTORS:\*\*(.*?)(?:\*\*|$)', text, re.DOTALL | re.IGNORECASE)
+            
+            if factors_section_match:
+                factors_text = factors_section_match.group(1)
+                
+                # Parse individual factors with improved regex
+                factor_lines = re.findall(r'-\s*([^:]+):\s*([^\n\r-]+)', factors_text)
+                
+                for factor_name, factor_desc in factor_lines:
+                    clean_name = factor_name.strip()
+                    clean_desc = factor_desc.strip()
+                    
+                    # Clean up common suffixes
+                    clean_name = clean_name.replace(' Impact', '').replace(' Assessment', '').replace(' Factors', '')
+                    
+                    if clean_name and clean_desc and len(clean_desc) > 10:  # Only meaningful descriptions
+                        factors[clean_name] = clean_desc
+            
+            # If no factors found in the structured format, try to extract from anywhere in the text
+            if not factors:
+                # Look for common factor patterns throughout the text
+                factor_keywords = [
+                    ('mileage', r'mileage[^.]*\.'),
+                    ('condition', r'condition[^.]*\.'),
+                    ('market demand', r'market\s+demand[^.]*\.'),
+                    ('location', r'location[^.]*\.'),
+                    ('depreciation', r'depreciation[^.]*\.'),
+                    ('features', r'features[^.]*\.')
+                ]
+                
+                for keyword, pattern in factor_keywords:
+                    match = re.search(pattern, text, re.IGNORECASE | re.DOTALL)
+                    if match:
+                        description = match.group(0).strip()
+                        if len(description) > 20:  # Only meaningful descriptions
+                            factors[keyword.title()] = description[:150]  # Limit length
         
-        if factors_section_match:
-            factors_text = factors_section_match.group(1)
-            
-            # Parse individual factors
-            factor_lines = re.findall(r'-\s*([^:]+):\s*([^\n-]+)', factors_text)
-            
-            for factor_name, factor_desc in factor_lines:
-                clean_name = factor_name.strip()
-                clean_desc = factor_desc.strip()
-                if clean_name and clean_desc:
-                    factors[clean_name] = clean_desc
+        except Exception as e:
+            print(f"Error extracting factors: {e}")
         
         return factors if factors else {"analysis": "Detailed factors included in market analysis"}
+    
+    def _extract_market_analysis(self, text: str) -> str:
+        """Extract market analysis section - kept for compatibility"""
+        # This method is kept for backward compatibility
+        # The full text is returned in estimate_price method
+        return text

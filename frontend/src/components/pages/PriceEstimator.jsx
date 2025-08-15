@@ -119,61 +119,132 @@ const PriceEstimator = () => {
     setError(null);
   };
 
-  // Updated price range parsing function
-// Fixed price range parsing function
-// Fixed price range parsing with proper currency handling
-// Fixed price parsing that works with the corrected backend
-// Ultra-safe price parsing function
-const parseEstimatedPrice = (estimationResult) => {
-  console.log('Raw estimation result:', estimationResult);
   
+// Fixed price parsing that properly handles all currencies
+// Completely fixed price parsing that eliminates all undefined values
+// Fixed price parsing with corrected regex
+const parseEstimatedPrice = (estimationResult) => {
   let minPrice = null;
   let maxPrice = null;
   
+  console.log('Raw estimation result:', estimationResult);
+  
   try {
-    // Method 1: Try display values
-    if (estimationResult.price_range?.min_display && estimationResult.price_range?.max_display) {
-      minPrice = String(estimationResult.price_range.min_display).replace(/^undefined/, '').trim();
-      maxPrice = String(estimationResult.price_range.max_display).replace(/^undefined/, '').trim();
+    // Method 1: Use display values from backend if available and valid
+    if (estimationResult.price_range?.min_display && 
+        estimationResult.price_range?.max_display &&
+        estimationResult.price_range.min_display !== "" &&
+        estimationResult.price_range.max_display !== "" &&
+        !estimationResult.price_range.min_display.includes('undefined') &&
+        !estimationResult.price_range.max_display.includes('undefined')) {
+      
+      minPrice = String(estimationResult.price_range.min_display).trim();
+      maxPrice = String(estimationResult.price_range.max_display).trim();
+      
+      console.log('Using display values:', { minPrice, maxPrice });
     }
-    
-    // Method 2: Try numeric values
-    else if (estimationResult.price_range?.min && estimationResult.price_range?.max) {
+    // Method 2: Use numeric values and format them properly
+    else if (estimationResult.price_range?.min && 
+             estimationResult.price_range?.max &&
+             estimationResult.price_range.min > 0) {
+      
       const minVal = Number(estimationResult.price_range.min);
       const maxVal = Number(estimationResult.price_range.max);
+      const detectedCurrency = estimationResult.price_range.currency_detected || '$';
       
-      if (!isNaN(minVal) && !isNaN(maxVal) && minVal > 0) {
-        // Auto-detect currency based on value
-        if (minVal > 50000) {
+      console.log('Detected currency:', detectedCurrency, 'Values:', minVal, maxVal);
+      
+      // Format based on detected currency
+      switch (detectedCurrency) {
+        case '₹':
           minPrice = `₹${minVal.toLocaleString('en-IN')}`;
           maxPrice = `₹${maxVal.toLocaleString('en-IN')}`;
-        } else {
+          break;
+        case 'C$':
+          minPrice = `C$${minVal.toLocaleString('en-CA')}`;
+          maxPrice = `C$${maxVal.toLocaleString('en-CA')}`;
+          break;
+        case 'A$':
+          minPrice = `A$${minVal.toLocaleString('en-AU')}`;
+          maxPrice = `A$${maxVal.toLocaleString('en-AU')}`;
+          break;
+        case '€':
+          minPrice = `€${minVal.toLocaleString('en-DE')}`;
+          maxPrice = `€${maxVal.toLocaleString('en-DE')}`;
+          break;
+        case '£':
+          minPrice = `£${minVal.toLocaleString('en-GB')}`;
+          maxPrice = `£${maxVal.toLocaleString('en-GB')}`;
+          break;
+        case '¥':
+          minPrice = `¥${minVal.toLocaleString('ja-JP')}`;
+          maxPrice = `¥${maxVal.toLocaleString('ja-JP')}`;
+          break;
+        default:
           minPrice = `$${minVal.toLocaleString('en-US')}`;
           maxPrice = `$${maxVal.toLocaleString('en-US')}`;
+      }
+      
+      console.log('Using numeric values with currency:', { minPrice, maxPrice });
+    }
+    // Method 3: Parse from estimated_price text
+    else if (estimationResult.estimated_price && 
+             estimationResult.estimated_price !== "Price estimate included in analysis" &&
+             estimationResult.estimated_price !== "Unable to estimate due to error") {
+      
+      let priceText = String(estimationResult.estimated_price).trim();
+      
+      // Clean any undefined values from the text
+      priceText = priceText.replace(/undefined/g, '').replace(/null/g, '').trim();
+      
+      // Handle range in text format
+      if (priceText.includes(' - ') || priceText.includes(' to ')) {
+        const separator = priceText.includes(' - ') ? ' - ' : ' to ';
+        const parts = priceText.split(separator);
+        if (parts.length === 2) {
+          minPrice = parts[0].trim();
+          maxPrice = parts[1].trim();
         }
+      } else if (priceText.match(/[₹€£¥]/) || priceText.match(/[CA]\$/) || priceText.match(/\$/)) {
+        // Fixed regex pattern - separate checks for different currency types
+        minPrice = maxPrice = priceText;
       }
+      
+      console.log('Using estimated_price text:', { minPrice, maxPrice });
     }
-    
-    // Method 3: Fallback to estimated_price
-    if (!minPrice && estimationResult.estimated_price) {
-      const priceStr = String(estimationResult.estimated_price).replace(/^undefined/, '').trim();
-      if (priceStr && priceStr !== 'Price estimate included in analysis') {
-        minPrice = maxPrice = priceStr;
-      }
-    }
-    
-    // Final cleanup
-    if (minPrice) minPrice = minPrice.replace(/^undefined/, '').trim();
-    if (maxPrice) maxPrice = maxPrice.replace(/^undefined/, '').trim();
     
   } catch (error) {
     console.error('Error parsing prices:', error);
-    minPrice = maxPrice = 'Price not available';
   }
   
-  console.log('Final parsed prices:', { minPrice, maxPrice });
+  // Final cleanup
+  if (minPrice) {
+    minPrice = String(minPrice)
+      .replace(/undefined/g, '')
+      .replace(/null/g, '')
+      .trim();
+    
+    if (!minPrice || minPrice === '' || minPrice === 'undefined' || minPrice === 'null') {
+      minPrice = null;
+    }
+  }
+  
+  if (maxPrice) {
+    maxPrice = String(maxPrice)
+      .replace(/undefined/g, '')
+      .replace(/null/g, '')
+      .trim();
+    
+    if (!maxPrice || maxPrice === '' || maxPrice === 'undefined' || maxPrice === 'null') {
+      maxPrice = null;
+    }
+  }
+  
+  console.log('Final cleaned prices:', { minPrice, maxPrice });
   return { minPrice, maxPrice };
 };
+
+
 
 
 
@@ -639,6 +710,7 @@ const parseMarketAnalysis = (text) => {
 
     {/* Fixed Price Range Card */}
     {/* Enhanced Price Range Card */}
+{/* Ultra-Safe Price Range Card */}
 <div className="price-range-card">
   <h3 className="price-range-title">
     <span className="price-icon">💰</span>
@@ -646,49 +718,45 @@ const parseMarketAnalysis = (text) => {
   </h3>
   <div className="price-range-content">
     {(() => {
-      const { minPrice, maxPrice, currency } = parseEstimatedPrice(estimationResult);
+      const { minPrice, maxPrice } = parseEstimatedPrice(estimationResult);
       
       console.log('Displaying prices:', { minPrice, maxPrice }); // Debug log
       
-      if (minPrice && maxPrice) {
-        // Ensure both prices have currency symbols
-        const displayMinPrice = minPrice.includes(currency) ? minPrice : `${currency}${minPrice}`;
-        const displayMaxPrice = maxPrice.includes(currency) ? maxPrice : `${currency}${maxPrice}`;
-        
-        if (minPrice === maxPrice) {
+      // Double-check for any remaining undefined values
+      const safeMinPrice = minPrice && !minPrice.includes('undefined') ? minPrice : null;
+      const safeMaxPrice = maxPrice && !maxPrice.includes('undefined') ? maxPrice : null;
+      
+      if (safeMinPrice && safeMaxPrice) {
+        if (safeMinPrice === safeMaxPrice) {
           return (
             <div className="price-display single-price">
-              {displayMinPrice}
+              {safeMinPrice}
             </div>
           );
         } else {
           return (
             <div className="price-display range-price">
-              <span className="min-price">{displayMinPrice}</span>
+              <span className="min-price">{safeMinPrice}</span>
               <span className="price-separator"> - </span>
-              <span className="max-price">{displayMaxPrice}</span>
+              <span className="max-price">{safeMaxPrice}</span>
             </div>
           );
         }
       } else {
-        // Fallback display
-        let fallbackPrice = estimationResult.estimated_price?.toString() || 'Price not available';
-        
-        // Add currency if missing
-        if (fallbackPrice !== 'Price not available' && !fallbackPrice.match(/[₹$€£¥]/)) {
-          fallbackPrice = `$${fallbackPrice}`;
-        }
-        
+        // Ultimate fallback
         return (
           <div className="price-display fallback-price">
-            {fallbackPrice}
+            Price estimate not available
           </div>
         );
       }
     })()}
-    
+    <div className="price-confidence">
+      <span className="confidence-label">AI-Powered Market Analysis</span>
+    </div>
   </div>
 </div>
+
 
     {/* Market Analysis */}
     <div className="market-analysis-section">

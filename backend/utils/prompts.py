@@ -91,14 +91,14 @@ Vehicle Details: {car_details}
 
 IMPORTANT: 
 1. Determine the appropriate currency based on the location provided. Use USD as default if location is unclear.
-2. Provide EXACT minimum and maximum price values for easy parsing.
+2. Use the EXACT currency symbols as specified below - DO NOT use generic $ for all countries.
+3. Provide EXACT minimum and maximum price values for easy parsing.
 
 Analyze these key factors and provide a detailed response in this EXACT format:
 
 **ESTIMATED PRICE RANGE:**
-Minimum Value: [Currency Symbol][Exact Amount]
-Maximum Value: [Currency Symbol][Exact Amount]
-Most Likely Price: [Currency Symbol][Exact Amount]
+Minimum Value: [Exact Currency Symbol][Exact Amount]
+Maximum Value: [Exact Currency Symbol][Exact Amount]
 
 **MARKET TRENDS ANALYSIS:**
 • Current market demand for this model
@@ -138,22 +138,23 @@ Most Likely Price: [Currency Symbol][Exact Amount]
 • Optimal pricing strategy
 • Negotiation tips
 
-Currency Guidelines:
-- USA/North America: USD ($)
-- Europe: EUR (€) 
-- UK: GBP (£)
-- India: INR (₹)
-- Canada: CAD (C$)
-- Australia: AUD (A$)
-- Japan: JPY (¥)
-- Other locations: Use appropriate local currency or USD as fallback
+MANDATORY Currency Usage by Location:
+- Canada/Canadian locations: Use C$ (example: C$25,000)
+- Australia/Australian locations: Use A$ (example: A$35,000)
+- USA/United States: Use $ (example: $25,000)
+- Europe/European locations: Use € (example: €20,000)
+- UK/United Kingdom: Use £ (example: £18,000)
+- India/Indian locations: Use ₹ (example: ₹2,500,000)
+- Japan/Japanese locations: Use ¥ (example: ¥3,000,000)
 
-CRITICAL: 
-- Use exact numeric values (e.g., $25,000 not $25K)
-- Always include currency symbols
+CRITICAL REQUIREMENTS:
+- NEVER use generic $ for Canada or Australia
+- Use exact numeric values (e.g., C$25,000 not C$25K)
+- Always include the correct currency symbol for the location
 - Provide realistic price ranges (10-20% difference between min/max)
 - Keep all bullet points concise (1-2 sentences max)
 """
+
 
 
 
@@ -167,6 +168,7 @@ Extract and return the following information if available:
 - Model  
 - Year
 - Engine details
+- Location
 - Transmission type
 - Fuel type
 - Mileage/Odometer reading
