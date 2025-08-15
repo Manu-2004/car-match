@@ -51,46 +51,93 @@ const CompareCars = () => {
   };
 
   const handleCompare = async () => {
-    setError(null);
-    setComparisonResult(null);
-    
-    // Basic validation
-    if (!car1.make || !car1.model || !car2.make || !car2.model) {
-      setError('Please enter at least the make and model for both cars.');
+  setError(null);
+  setComparisonResult(null);
+  
+  // Basic validation
+  if (!car1.make || !car1.model || !car2.make || !car2.model) {
+    setError('Please enter at least the make and model for both cars.');
+    return;
+  }
+
+  setIsLoading(true);
+
+  try {
+    const car1Description = generateDescription(car1);
+    const car2Description = generateDescription(car2);
+
+    // Ensure consistent data types
+    const requestBody = {
+      car1: { 
+        raw_description: car1Description,
+        make: car1.make || null,
+        model: car1.model || null,
+        year: car1.year || null,  // Keep as string since input gives string
+        engine: car1.engine || null,
+        transmission: car1.transmission || null,
+        fuel_type: car1.fuel_type || null,
+        mileage: car1.mileage || null,  // Keep as string
+        features: car1.features || null,
+        condition: car1.condition || "New",
+        price: car1.price || null  // Keep as string
+      },
+      car2: { 
+        raw_description: car2Description,
+        make: car2.make || null,
+        model: car2.model || null,
+        year: car2.year || null,
+        engine: car2.engine || null,
+        transmission: car2.transmission || null,
+        fuel_type: car2.fuel_type || null,
+        mileage: car2.mileage || null,
+        features: car2.features || null,
+        condition: car2.condition || "New",
+        price: car2.price || null
+      }
+    };
+
+    // DEBUG: Log the request body
+    console.log('Request body:', JSON.stringify(requestBody, null, 2));
+
+    const response = await fetch('http://localhost:8000/api/compare/', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(requestBody)
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      console.error('API Error:', errorData);
+      
+      if (response.status === 422) {
+        let errorMessage = 'Validation failed:\n';
+        if (errorData.detail && Array.isArray(errorData.detail)) {
+          errorData.detail.forEach(error => {
+            errorMessage += `- ${error.loc?.join(' -> ') || 'Unknown field'}: ${error.msg}\n`;
+          });
+        } else {
+          errorMessage += JSON.stringify(errorData, null, 2);
+        }
+        setError(errorMessage);
+      } else {
+        throw new Error(`Server error: ${response.status} ${response.statusText}`);
+      }
       return;
     }
 
-    setIsLoading(true);
+    const result = await response.json();
+    setComparisonResult(result);
+    
+  } catch (error) {
+    console.error('Error comparing cars:', error);
+    setError(`Failed to compare cars: ${error.message}`);
+  } finally {
+    setIsLoading(false);
+  }
+};
 
-    try {
-      const car1Description = generateDescription(car1);
-      const car2Description = generateDescription(car2);
-
-      const response = await fetch('http://localhost:8000/api/compare/', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          car1: { raw_description: car1Description, ...car1 },
-          car2: { raw_description: car2Description, ...car2 }
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error(`Server error: ${response.status} ${response.statusText}`);
-      }
-
-      const result = await response.json();
-      setComparisonResult(result);
-      
-    } catch (error) {
-      console.error('Error comparing cars:', error);
-      setError(`Failed to compare cars: ${error.message}`);
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   const clearFields = () => {
     setCar1({
@@ -106,24 +153,72 @@ const CompareCars = () => {
   };
 
   // Parse and format comparison result
-  const formatComparisonResult = (text) => {
-    if (!text) return [];
+  // Parse and format comparison result
+// Parse and format comparison result
+const formatComparisonResult = (text) => {
+  if (!text) return [];
+  
+  // Split by numbered sections
+  const sections = text.split(/\*\*\d+\./).filter(section => section.trim());
+  
+  // Also handle **Final Recommendation** section
+  const finalRecIndex = text.indexOf('**Final Recommendation**');
+  if (finalRecIndex !== -1) {
+    const beforeFinal = text.substring(0, finalRecIndex);
+    const finalSection = text.substring(finalRecIndex);
     
-    const sections = text.split('\n\n').filter(section => section.trim());
-    return sections.map((section, index) => {
+    // Split the before part and add the final section
+    const beforeSections = beforeFinal.split(/\*\*\d+\./).filter(section => section.trim());
+    beforeSections.push(finalSection);
+    
+    return beforeSections.map((section, index) => {
       const lines = section.split('\n').filter(line => line.trim());
       if (lines.length === 0) return null;
       
-      const title = lines[0];
-      const content = lines.slice(1);
+      let title = '';
+      let content = lines;
+      
+      // Extract title
+      const firstLine = lines[0];
+      if (firstLine.includes('**')) {
+        title = firstLine.replace(/\*\*/g, '').trim();
+        content = lines.slice(1);
+      } else {
+        // Try to extract section title from content
+        const titleMatch = section.match(/([^*\n]+?)(?:\n|$)/);
+        if (titleMatch) {
+          title = titleMatch[1].trim();
+          content = lines.slice(1);
+        }
+      }
+      
+      // Clean up title
+      title = title.replace(/^\d+\.\s*/, '').trim();
       
       return {
         id: index,
-        title: title.replace(/[*#]/g, '').trim(),
-        content: content
+        title: title || `Section ${index + 1}`,
+        content: content.filter(line => line.trim())
       };
     }).filter(Boolean);
-  };
+  }
+  
+  // Fallback to original logic
+  return sections.map((section, index) => {
+    const lines = section.split('\n').filter(line => line.trim());
+    if (lines.length === 0) return null;
+    
+    const title = lines[0]?.replace(/\*\*/g, '').replace(/^\d+\.\s*/, '').trim() || `Section ${index + 1}`;
+    const content = lines.slice(1);
+    
+    return {
+      id: index,
+      title: title,
+      content: content
+    };
+  }).filter(Boolean);
+};
+
 
   return (
     <div className="compare-cars-container">
@@ -450,67 +545,71 @@ const CompareCars = () => {
         )}
 
         {/* Results Section */}
-        {comparisonResult && (
-          <div className="results-section">
-            <div className="results-header">
-              <h2 className="results-main-title">
-                <span className="results-icon">🏆</span>
-                AI Comparison Results
-              </h2>
-            </div>
+        {/* Results Section */}
+{comparisonResult && (
+  <div className="results-section">
+    <div className="results-header">
+      <h2 className="results-main-title">
+        <span className="results-icon"></span>
+         AI Comparison Results
+      </h2>
+    </div>
 
-            <div className="comparison-summary">
-              <div className="car-summary">
-                <h3>🚗 {car1.make} {car1.model} {car1.year}</h3>
-                <div className="car-quick-stats">
-                  {car1.engine && <span className="stat">Engine: {car1.engine}</span>}
-                  {car1.fuel_type && <span className="stat">Fuel: {car1.fuel_type}</span>}
-                  {car1.price && <span className="stat">Price: ${car1.price}</span>}
-                </div>
-              </div>
-              
-              <div className="car-summary">
-                <h3>🚗 {car2.make} {car2.model} {car2.year}</h3>
-                <div className="car-quick-stats">
-                  {car2.engine && <span className="stat">Engine: {car2.engine}</span>}
-                  {car2.fuel_type && <span className="stat">Fuel: {car2.fuel_type}</span>}
-                  {car2.price && <span className="stat">Price: ${car2.price}</span>}
-                </div>
-              </div>
-            </div>
+    <div className="comparison-summary">
+      <div className="car-summary">
+        <h3>🚗 {car1.make} {car1.model} {car1.year}</h3>
+        <div className="car-quick-stats">
+          {car1.engine && <span className="stat">Engine: {car1.engine}</span>}
+          {car1.fuel_type && <span className="stat">Fuel: {car1.fuel_type}</span>}
+          {car1.price && <span className="stat">Price: ${car1.price}</span>}
+        </div>
+      </div>
+      
+      <div className="car-summary">
+        <h3>🚗 {car2.make} {car2.model} {car2.year}</h3>
+        <div className="car-quick-stats">
+          {car2.engine && <span className="stat">Engine: {car2.engine}</span>}
+          {car2.fuel_type && <span className="stat">Fuel: {car2.fuel_type}</span>}
+          {car2.price && <span className="stat">Price: ${car2.price}</span>}
+        </div>
+      </div>
+    </div>
 
-            <div className="detailed-comparison">
-              {formatComparisonResult(comparisonResult.comparison).map(section => (
-                <div key={section.id} className="comparison-section">
-                  <h3 className="section-title">{section.title}</h3>
-                  <div className="section-content">
-                    {section.content.map((line, lineIndex) => (
-                      <div key={lineIndex} className="comparison-point">
-                        {line.startsWith('•') || line.startsWith('-') ? (
-                          <div className="bullet-point">{line}</div>
-                        ) : (
-                          <div className="comparison-text">{line}</div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ))}
+    <div className="detailed-comparison">
+  {formatComparisonResult(comparisonResult.comparison).map(section => (
+    <div key={section.id} className="comparison-section">
+      <h3 className="section-title">{section.title}</h3>
+      <div className="section-content">
+        {section.content.map((line, lineIndex) => {
+          // Check if line contains car names to highlight them
+          const isCarName = (car1.make && line.includes(car1.make)) || 
+                           (car2.make && line.includes(car2.make)) ||
+                           line.match(/^[A-Z][a-zA-Z]+\s+[A-Z][a-zA-Z]+\s+\d{4}:/);
+          
+          return (
+            <div key={lineIndex} className="comparison-point">
+              {line.startsWith('•') || line.startsWith('-') ? (
+                <div className="bullet-point">{line}</div>
+              ) : isCarName ? (
+                <div className="car-name-header">{line}</div>
+              ) : line.toLowerCase().startsWith('winner:') ? (
+                <div className="winner-text">{line}</div>
+              ) : (
+                <div className="comparison-text">{line}</div>
+              )}
             </div>
+          );
+        })}
+      </div>
+    </div>
+  ))}
+</div>
 
-            {comparisonResult.recommendation && (
-              <div className="recommendation-section">
-                <h3 className="recommendation-title">
-                  <span className="recommendation-icon">💡</span>
-                  Recommendation
-                </h3>
-                <div className="recommendation-content">
-                  {comparisonResult.recommendation}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
+
+    
+  </div>
+)}
+
       </div>
     </div>
   );
