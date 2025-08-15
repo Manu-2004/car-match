@@ -10,6 +10,7 @@ const PriceEstimator = () => {
     transmission: '',
     fuel_type: '',
     mileage: '',
+    mileage_unit: 'miles', // New field for mileage unit
     features: '',
     condition: 'Good',
     location: '',
@@ -28,7 +29,7 @@ const PriceEstimator = () => {
     if (carData.engine) parts.push(`${carData.engine} engine`);
     if (carData.transmission) parts.push(`${carData.transmission} transmission`);
     if (carData.fuel_type) parts.push(`${carData.fuel_type} fuel`);
-    if (carData.mileage) parts.push(`${carData.mileage} miles`);
+    if (carData.mileage) parts.push(`${carData.mileage} ${carData.mileage_unit}`);
     if (carData.condition) parts.push(`${carData.condition} condition`);
     if (carData.location) parts.push(`Located in ${carData.location}`);
     if (carData.features) parts.push(`Features: ${carData.features}`);
@@ -62,8 +63,10 @@ const PriceEstimator = () => {
           transmission: carDetails.transmission || null,
           fuel_type: carDetails.fuel_type || null,
           mileage: carDetails.mileage || null,
+          mileage_unit: carDetails.mileage_unit || "miles",
           features: carDetails.features || null,
-          condition: carDetails.condition || "Good"
+          condition: carDetails.condition || "Good",
+          location: carDetails.location || null
         }
       };
 
@@ -109,18 +112,209 @@ const PriceEstimator = () => {
   const clearFields = () => {
     setCarDetails({
       make: '', model: '', year: '', engine: '', transmission: '',
-      fuel_type: '', mileage: '', features: '', condition: 'Good', location: '', additional_info: ''
+      fuel_type: '', mileage: '', mileage_unit: 'miles', features: '', 
+      condition: 'Good', location: '', additional_info: ''
     });
     setEstimationResult(null);
     setError(null);
   };
 
-  const formatPriceRange = (range) => {
-    if (range.min && range.max && range.min !== range.max) {
-      return `$${range.min.toLocaleString()} - $${range.max.toLocaleString()}`;
+  // Updated price range parsing function
+const parseEstimatedPrice = (estimationResult) => {
+  let minPrice = null;
+  let maxPrice = null;
+  
+  // Try to get from price_range object first
+  if (estimationResult.price_range && 
+      estimationResult.price_range.min && 
+      estimationResult.price_range.max) {
+    minPrice = estimationResult.price_range.min;
+    maxPrice = estimationResult.price_range.max;
+  }
+  // If price_range doesn't exist, try to parse from estimated_price
+  else if (estimationResult.estimated_price) {
+    const priceText = estimationResult.estimated_price.toString();
+    
+    // Handle array format like ['₹28,00,000', '₹26,00,000', '₹30,00,000']
+    if (priceText.includes('[') && priceText.includes(']')) {
+      const matches = priceText.match(/['"]([₹$€£¥][\d,]+)['"]]/g);
+      if (matches && matches.length >= 2) {
+        const prices = matches.map(match => {
+          const cleanPrice = match.replace(/['"[\]]/g, '');
+          const numericValue = parseFloat(cleanPrice.replace(/[₹$€£¥,]/g, ''));
+          return { text: cleanPrice, value: numericValue };
+        });
+        
+        prices.sort((a, b) => a.value - b.value);
+        minPrice = prices[0].text;
+        maxPrice = prices[prices.length - 1].text;
+      }
     }
-    return 'Range not available';
-  };
+    // Handle range format like "₹26,00,000 - ₹30,00,000"
+    else if (priceText.includes(' - ')) {
+      const rangeParts = priceText.split(' - ');
+      if (rangeParts.length === 2) {
+        minPrice = rangeParts[0].trim();
+        maxPrice = rangeParts[1].trim();
+      }
+    }
+    // Single price - use as both min and max
+    else {
+      minPrice = maxPrice = priceText;
+    }
+  }
+  
+  return { minPrice, maxPrice };
+};
+
+// Enhanced market analysis parsing
+// Enhanced market analysis parsing (excludes Key Pricing Factors)
+const parseMarketAnalysis = (text) => {
+  if (!text) return [];
+  
+  const sections = [];
+  const lines = text.split('\n').filter(line => line.trim());
+  
+  let currentSection = null;
+  let skipSection = false;
+  
+  lines.forEach(line => {
+    const trimmedLine = line.trim();
+    
+    // Check if line is a section header
+    const isHeader = trimmedLine.match(/^\*\*(.*?)\*\*/) || 
+                    (trimmedLine.endsWith(':') && trimmedLine.length < 100) ||
+                    trimmedLine.includes('ANALYSIS') || 
+                    trimmedLine.includes('TRENDS') || 
+                    trimmedLine.includes('DEMAND') || 
+                    trimmedLine.includes('SUPPLY') ||
+                    trimmedLine.includes('FACTORS') ||
+                    trimmedLine.includes('DEPRECIATION') ||
+                    trimmedLine.includes('LOCATION') ||
+                    trimmedLine.includes('CONDITION') ||
+                    trimmedLine.includes('RECOMMENDATIONS') ||
+                    trimmedLine.includes('IMPACT');
+    
+    if (isHeader) {
+      // Save previous section if exists and not skipped
+      if (currentSection && currentSection.content.length > 0 && !skipSection) {
+        sections.push(currentSection);
+      }
+      
+      // Check if this is the "Key Pricing Factors" section to skip
+      skipSection = trimmedLine.toLowerCase().includes('key pricing factors') || 
+                   trimmedLine.toLowerCase().includes('pricing factors');
+      
+      if (!skipSection) {
+        // Create new section
+        let title = trimmedLine.replace(/\*\*/g, '').replace(/:$/, '').trim();
+        title = title.replace(/^[A-Z\s]+:/, '').trim();
+        
+        currentSection = {
+          title: title,
+          content: []
+        };
+      } else {
+        currentSection = null;
+      }
+    } 
+    else if (currentSection && trimmedLine && !skipSection) {
+      // Process content lines
+      let cleanLine = trimmedLine;
+      
+      // Remove bullet points and dashes
+      cleanLine = cleanLine.replace(/^[•\-*]\s*/, '');
+      
+      // Skip lines that look like key pricing factors (start with "- FactorName:")
+      if (cleanLine.match(/^[A-Za-z\s]+:\s/)) {
+        return; // Skip this line as it's likely a pricing factor
+      }
+      
+      // Skip very short lines
+      if (cleanLine.length > 10) {
+        // Limit line length for readability
+        if (cleanLine.length > 200) {
+          cleanLine = cleanLine.substring(0, 200) + '...';
+        }
+        currentSection.content.push(cleanLine);
+      }
+    }
+  });
+  
+  // Add final section if not skipped
+  if (currentSection && currentSection.content.length > 0 && !skipSection) {
+    sections.push(currentSection);
+  }
+  
+  // If no sections found, create a single section with filtered content
+  if (sections.length === 0 && text.trim()) {
+    const filteredText = text.split('\n')
+      .filter(line => !line.toLowerCase().includes('key pricing factors'))
+      .filter(line => !line.match(/^[•\-*]\s*[A-Za-z\s]+:\s/))
+      .join('\n')
+      .trim();
+    
+    if (filteredText) {
+      sections.push({
+        title: 'Market Analysis',
+        content: [filteredText]
+      });
+    }
+  }
+  
+  return sections;
+};
+
+// Enhanced function to parse key pricing factors from the response
+const parseKeyPricingFactors = (text) => {
+  if (!text) return {};
+  
+  const factors = {};
+  const lines = text.split('\n');
+  let inFactorsSection = false;
+  
+  lines.forEach(line => {
+    const trimmedLine = line.trim();
+    
+    // Check if we've entered the Key Pricing Factors section
+    if (trimmedLine.toLowerCase().includes('key pricing factors')) {
+      inFactorsSection = true;
+      return;
+    }
+    
+    // Check if we've left the factors section (new section started)
+    if (inFactorsSection && trimmedLine.match(/^\*\*(.*?)\*\*/) && 
+        !trimmedLine.toLowerCase().includes('factors')) {
+      inFactorsSection = false;
+      return;
+    }
+    
+    // Parse factor lines in the format "- Factor Name: Description"
+    if (inFactorsSection && trimmedLine.match(/^-?\s*([^:]+):\s*(.+)$/)) {
+      const match = trimmedLine.match(/^-?\s*([^:]+):\s*(.+)$/);
+      if (match) {
+        const factorName = match[1].trim();
+        const factorDescription = match[1].trim();
+        
+        // Clean up factor name
+        const cleanFactorName = factorName
+          .replace(/^-\s*/, '')
+          .replace(/Impact$/, '')
+          .replace(/Assessment$/, '')
+          .trim();
+        
+        factors[cleanFactorName] = factorDescription;
+      }
+    }
+  });
+  
+  return factors;
+};
+
+
+
+ 
+
 
   return (
     <div className="price-estimator-container">
@@ -180,15 +374,25 @@ const PriceEstimator = () => {
                   />
                 </div>
 
-                <div className="input-field">
+                <div className="input-field mileage-field">
                   <label className="field-label">Mileage</label>
-                  <input
-                    type="number"
-                    className="field-input"
-                    value={carDetails.mileage}
-                    onChange={(e) => setCarDetails({...carDetails, mileage: e.target.value})}
-                    placeholder="Miles driven"
-                  />
+                  <div className="mileage-input-group">
+                    <input
+                      type="number"
+                      className="field-input mileage-number"
+                      value={carDetails.mileage}
+                      onChange={(e) => setCarDetails({...carDetails, mileage: e.target.value})}
+                      placeholder="Distance driven"
+                    />
+                    <select
+                      className="field-input mileage-unit"
+                      value={carDetails.mileage_unit}
+                      onChange={(e) => setCarDetails({...carDetails, mileage_unit: e.target.value})}
+                    >
+                      <option value="miles">Miles</option>
+                      <option value="km">KM</option>
+                    </select>
+                  </div>
                 </div>
 
                 <div className="input-field">
@@ -254,7 +458,7 @@ const PriceEstimator = () => {
                     className="field-input"
                     value={carDetails.location}
                     onChange={(e) => setCarDetails({...carDetails, location: e.target.value})}
-                    placeholder="City, State"
+                    placeholder="City, State/Country"
                   />
                 </div>
                 
@@ -322,83 +526,145 @@ const PriceEstimator = () => {
           </div>
         )}
 
-        {/* Results Section */}
-        {estimationResult && (
-          <div className="results-section">
-            <div className="results-header">
-              <h2 className="results-main-title">
-                <span className="results-icon">💎</span>
-                Price Estimation Results
-              </h2>
+       {/* Results Section */}
+{estimationResult && (
+  <div className="results-section">
+    <div className="results-header">
+      <h2 className="results-main-title">
+        <span className="results-icon">💎</span>
+        Price Estimation Results
+      </h2>
+    </div>
+
+    <div className="estimation-summary">
+      <div className="vehicle-summary">
+        <h3>🚗 {carDetails.make} {carDetails.model} {carDetails.year}</h3>
+        <div className="vehicle-quick-stats">
+          {carDetails.mileage && <span className="stat">Mileage: {carDetails.mileage} {carDetails.mileage_unit}</span>}
+          {carDetails.condition && <span className="stat">Condition: {carDetails.condition}</span>}
+          {carDetails.location && <span className="stat">Location: {carDetails.location}</span>}
+        </div>
+      </div>
+    </div>
+
+    {/* Price Range Card */}
+    <div className="price-range-card">
+      <h3 className="price-range-title">
+        <span className="price-icon">💰</span>
+        Estimated Price Range
+      </h3>
+      <div className="price-range-content">
+        {(() => {
+          const { minPrice, maxPrice } = parseEstimatedPrice(estimationResult);
+          
+          if (minPrice && maxPrice && minPrice !== maxPrice) {
+            return (
+              <div className="price-display">
+                {minPrice} - {maxPrice}
+              </div>
+            );
+          } else if (minPrice) {
+            return (
+              <div className="price-display">
+                {minPrice}
+              </div>
+            );
+          } else {
+            return (
+              <div className="price-display">
+                {estimationResult.estimated_price}
+              </div>
+            );
+          }
+        })()}
+        <div className="price-confidence">
+          <span className="confidence-label">AI-Powered Market Analysis</span>
+        </div>
+      </div>
+    </div>
+
+    {/* Market Analysis (excludes Key Pricing Factors) */}
+    <div className="market-analysis-section">
+      <h3 className="analysis-title">
+        <span className="analysis-icon">📈</span>
+        Market Analysis
+      </h3>
+      <div className="analysis-sections">
+        {parseMarketAnalysis(estimationResult.market_analysis).map((section, index) => (
+          <div key={index} className="analysis-section">
+            <div className="analysis-section-header">
+              <h4 className="analysis-section-title">
+                <span className="section-number">{index + 1}</span>
+                <span className="section-icon">
+                  {section.title.toLowerCase().includes('trend') ? '📊' :
+                   section.title.toLowerCase().includes('demand') ? '📈' :
+                   section.title.toLowerCase().includes('depreciation') ? '📉' :
+                   section.title.toLowerCase().includes('location') ? '🌍' :
+                   section.title.toLowerCase().includes('condition') ? '⚙️' :
+                   section.title.toLowerCase().includes('recommendation') ? '💡' :
+                   '📋'}
+                </span>
+                {section.title}
+              </h4>
             </div>
-
-            <div className="estimation-summary">
-              <div className="vehicle-summary">
-                <h3>🚗 {carDetails.make} {carDetails.model} {carDetails.year}</h3>
-                <div className="vehicle-quick-stats">
-                  {carDetails.mileage && <span className="stat">Mileage: {carDetails.mileage} miles</span>}
-                  {carDetails.condition && <span className="stat">Condition: {carDetails.condition}</span>}
-                  {carDetails.location && <span className="stat">Location: {carDetails.location}</span>}
+            <div className="analysis-section-content">
+              {section.content.map((line, lineIndex) => (
+                <div key={lineIndex} className="analysis-point">
+                  <span className="point-indicator">▸</span>
+                  <span className="point-text">{line}</span>
                 </div>
-              </div>
+              ))}
             </div>
-
-            <div className="price-cards">
-              <div className="price-card main-estimate">
-                <h3 className="price-card-title">
-                  <span className="price-icon">🏷️</span>
-                  Estimated Value
-                </h3>
-                <div className="price-value">
-                  {estimationResult.estimated_price}
-                </div>
-              </div>
-
-              <div className="price-card price-range">
-                <h3 className="price-card-title">
-                  <span className="price-icon">📊</span>
-                  Price Range
-                </h3>
-                <div className="range-value">
-                  {formatPriceRange(estimationResult.price_range)}
-                </div>
-              </div>
-            </div>
-
-            <div className="market-analysis-section">
-              <h3 className="analysis-title">
-                <span className="analysis-icon">📈</span>
-                Market Analysis
-              </h3>
-              <div className="analysis-content">
-                {estimationResult.market_analysis.split('\n').map((line, index) => (
-                  line.trim() && (
-                    <div key={index} className="analysis-point">
-                      {line.trim()}
-                    </div>
-                  )
-                ))}
-              </div>
-            </div>
-
-            {estimationResult.factors && Object.keys(estimationResult.factors).length > 0 && (
-              <div className="factors-section">
-                <h3 className="factors-title">
-                  <span className="factors-icon">⚖️</span>
-                  Key Pricing Factors
-                </h3>
-                <div className="factors-grid">
-                  {Object.entries(estimationResult.factors).map(([factor, description]) => (
-                    <div key={factor} className="factor-card">
-                      <h4 className="factor-name">{factor.replace('_', ' ').toUpperCase()}</h4>
-                      <p className="factor-description">{description}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
           </div>
-        )}
+        ))}
+      </div>
+    </div>
+
+    {/* Key Pricing Factors - Only displayed here */}
+    {(() => {
+      // Try to parse from market_analysis first, then fall back to factors
+      const parsedFactors = parseKeyPricingFactors(estimationResult.market_analysis);
+      const factorsToShow = Object.keys(parsedFactors).length > 0 ? 
+        parsedFactors : 
+        (estimationResult.factors && Object.keys(estimationResult.factors).length > 0 ? estimationResult.factors : null);
+      
+      return factorsToShow && Object.keys(factorsToShow).length > 0 ? (
+        <div className="factors-section">
+          <h3 className="factors-title">
+            <span className="factors-icon">⚖️</span>
+            Key Pricing Factors
+          </h3>
+          <div className="factors-grid">
+            {Object.entries(factorsToShow).map(([factor, description]) => (
+              <div key={factor} className="factor-card">
+                <div className="factor-header">
+                  <span className="factor-icon">
+                    {factor.toLowerCase().includes('mileage') ? '🛣️' :
+                     factor.toLowerCase().includes('condition') ? '⚙️' :
+                     factor.toLowerCase().includes('demand') ? '📈' :
+                     factor.toLowerCase().includes('location') ? '🌍' :
+                     factor.toLowerCase().includes('age') || factor.toLowerCase().includes('depreciation') ? '📅' :
+                     factor.toLowerCase().includes('features') ? '✨' :
+                     '🔧'}
+                  </span>
+                  <h4 className="factor-name">
+                    {factor.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                  </h4>
+                </div>
+                <p className="factor-description">
+                  {description.replace(/^-\s*/, '').trim()}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null;
+    })()}
+  </div>
+)}
+
+
+        
       </div>
     </div>
   );

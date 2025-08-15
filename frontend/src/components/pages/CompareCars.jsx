@@ -312,7 +312,7 @@ const formatComparisonResult = (text) => {
                     onChange={(e) => setCar1({...car1, fuel_type: e.target.value})}
                   >
                     <option value="">Select Fuel Type</option>
-                    <option value="Gasoline">Gasoline</option>
+                    <option value="Petrol">Petrol</option>
                     <option value="Diesel">Diesel</option>
                     <option value="Electric">Electric</option>
                     <option value="Hybrid">Hybrid</option>
@@ -449,7 +449,7 @@ const formatComparisonResult = (text) => {
                     onChange={(e) => setCar2({...car2, fuel_type: e.target.value})}
                   >
                     <option value="">Select Fuel Type</option>
-                    <option value="Gasoline">Gasoline</option>
+                    <option value="Petrol">Petrol</option>
                     <option value="Diesel">Diesel</option>
                     <option value="Electric">Electric</option>
                     <option value="Hybrid">Hybrid</option>

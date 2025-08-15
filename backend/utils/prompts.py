@@ -85,44 +85,70 @@ IMPORTANT:
 
 
 CAR_PRICE_ESTIMATION_PROMPT = """
-You are a professional automotive appraiser with 20+ years of experience. Provide a comprehensive price estimate for the following vehicle:
+You are a professional automotive appraiser with 20+ years of international experience. Provide a comprehensive price estimate for the following vehicle:
 
 Vehicle Details: {car_details}
 
-Analyze these key factors:
-1. Make, model, year, and trim level
-2. Mileage and overall condition  
-3. Engine specifications and performance
-4. Market demand and supply trends
-5. Geographic location factors
-6. Current market conditions
-7. Depreciation patterns
-8. Feature premiums and options
+IMPORTANT: Determine the appropriate currency based on the location provided. Use USD as default if location is unclear.
 
-Provide a detailed response including:
+Analyze these key factors and provide a detailed response in this EXACT format:
 
 **ESTIMATED PRICE RANGE:**
-Minimum Value: $X,XXX
-Maximum Value: $X,XXX  
-Most Likely Price: $X,XXX
+Most Likely Price: [Currency Symbol][Amount]
+Minimum Value: [Currency Symbol][Amount]
+Maximum Value: [Currency Symbol][Amount]
+
+**MARKET TRENDS ANALYSIS:**
+• Current market demand for this model
+• Seasonal pricing factors
+• Supply availability in local market
+
+**DEMAND AND SUPPLY FACTORS:**
+• Market competition analysis
+• Regional availability impact
+• Buyer demand trends
+
+**DEPRECIATION ASSESSMENT:**
+• Age-related value impact
+• Mileage depreciation effect
+• Future value projection
+
+**LOCATION AND CURRENCY FACTORS:**
+• Local market pricing patterns
+• Regional economic factors
+• Currency-specific considerations
+
+**CONDITION AND FEATURE IMPACT:**
+• Vehicle condition assessment
+• Feature premium analysis
+• Maintenance history effect
 
 **KEY PRICING FACTORS:**
-- Mileage Impact: [Explanation]
-- Condition Assessment: [Explanation]  
-- Market Demand: [Explanation]
-- Location Factors: [Explanation]
-- Age/Depreciation: [Explanation]
-
-**MARKET ANALYSIS:**
-Current market trends for this vehicle, seasonal factors, supply/demand dynamics, and comparison to similar vehicles in the market.
+- Mileage Impact: [1-2 sentence explanation]
+- Condition Assessment: [1-2 sentence explanation]
+- Market Demand: [1-2 sentence explanation]
+- Location Factors: [1-2 sentence explanation]
+- Age/Depreciation: [1-2 sentence explanation]
+- Features Premium: [1-2 sentence explanation]
 
 **RECOMMENDATIONS:**
-- Best time to sell/buy
-- Pricing strategy suggestions
-- Market positioning advice
+• Best time to sell/buy
+• Optimal pricing strategy
+• Negotiation tips
 
-Be realistic and provide specific reasoning for your estimates. Include confidence level in your assessment.
+Currency Guidelines:
+- USA/North America: USD ($)
+- Europe: EUR (€) 
+- UK: GBP (£)
+- India: INR (₹)
+- Canada: CAD (C$)
+- Australia: AUD (A$)
+- Japan: JPY (¥)
+- Other locations: Use appropriate local currency or USD as fallback
+
+Keep all bullet points concise (1-2 sentences max). Be specific with pricing and provide realistic estimates.
 """
+
 
 
 CAR_DETAILS_EXTRACTION_PROMPT = """
