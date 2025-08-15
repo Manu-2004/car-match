@@ -120,52 +120,185 @@ const PriceEstimator = () => {
   };
 
   // Updated price range parsing function
+// Fixed price range parsing function
+// Fixed price range parsing with proper currency handling
+// Fixed price parsing that works with the corrected backend
+// Ultra-safe price parsing function
 const parseEstimatedPrice = (estimationResult) => {
+  console.log('Raw estimation result:', estimationResult);
+  
   let minPrice = null;
   let maxPrice = null;
   
-  // Try to get from price_range object first
-  if (estimationResult.price_range && 
-      estimationResult.price_range.min && 
-      estimationResult.price_range.max) {
-    minPrice = estimationResult.price_range.min;
-    maxPrice = estimationResult.price_range.max;
-  }
-  // If price_range doesn't exist, try to parse from estimated_price
-  else if (estimationResult.estimated_price) {
-    const priceText = estimationResult.estimated_price.toString();
+  try {
+    // Method 1: Try display values
+    if (estimationResult.price_range?.min_display && estimationResult.price_range?.max_display) {
+      minPrice = String(estimationResult.price_range.min_display).replace(/^undefined/, '').trim();
+      maxPrice = String(estimationResult.price_range.max_display).replace(/^undefined/, '').trim();
+    }
     
-    // Handle array format like ['₹28,00,000', '₹26,00,000', '₹30,00,000']
-    if (priceText.includes('[') && priceText.includes(']')) {
-      const matches = priceText.match(/['"]([₹$€£¥][\d,]+)['"]]/g);
-      if (matches && matches.length >= 2) {
-        const prices = matches.map(match => {
-          const cleanPrice = match.replace(/['"[\]]/g, '');
-          const numericValue = parseFloat(cleanPrice.replace(/[₹$€£¥,]/g, ''));
-          return { text: cleanPrice, value: numericValue };
-        });
+    // Method 2: Try numeric values
+    else if (estimationResult.price_range?.min && estimationResult.price_range?.max) {
+      const minVal = Number(estimationResult.price_range.min);
+      const maxVal = Number(estimationResult.price_range.max);
+      
+      if (!isNaN(minVal) && !isNaN(maxVal) && minVal > 0) {
+        // Auto-detect currency based on value
+        if (minVal > 50000) {
+          minPrice = `₹${minVal.toLocaleString('en-IN')}`;
+          maxPrice = `₹${maxVal.toLocaleString('en-IN')}`;
+        } else {
+          minPrice = `$${minVal.toLocaleString('en-US')}`;
+          maxPrice = `$${maxVal.toLocaleString('en-US')}`;
+        }
+      }
+    }
+    
+    // Method 3: Fallback to estimated_price
+    if (!minPrice && estimationResult.estimated_price) {
+      const priceStr = String(estimationResult.estimated_price).replace(/^undefined/, '').trim();
+      if (priceStr && priceStr !== 'Price estimate included in analysis') {
+        minPrice = maxPrice = priceStr;
+      }
+    }
+    
+    // Final cleanup
+    if (minPrice) minPrice = minPrice.replace(/^undefined/, '').trim();
+    if (maxPrice) maxPrice = maxPrice.replace(/^undefined/, '').trim();
+    
+  } catch (error) {
+    console.error('Error parsing prices:', error);
+    minPrice = maxPrice = 'Price not available';
+  }
+  
+  console.log('Final parsed prices:', { minPrice, maxPrice });
+  return { minPrice, maxPrice };
+};
+
+
+
+// Fixed key pricing factors parsing
+// Fixed key pricing factors parsing
+const parseKeyPricingFactors = (marketAnalysisText, factorsObject) => {
+  const factors = {};
+  
+  // Debug log to see what we're working with
+  console.log('Market Analysis Text:', marketAnalysisText);
+  console.log('Factors Object:', factorsObject);
+  
+  // First try to get from the factors object if available
+  if (factorsObject && typeof factorsObject === 'object' && Object.keys(factorsObject).length > 0) {
+    Object.entries(factorsObject).forEach(([key, value]) => {
+      if (typeof value === 'string' && value.trim().length > 0) {
+        // Clean up the key
+        const cleanKey = key
+          .replace(/_/g, ' ')
+          .replace(/\b\w/g, l => l.toUpperCase())
+          .replace(' Impact', '')
+          .replace(' Assessment', '');
         
-        prices.sort((a, b) => a.value - b.value);
-        minPrice = prices[0].text;
-        maxPrice = prices[prices.length - 1].text;
+        // Clean up the value - remove leading dashes and extra whitespace
+        const cleanValue = value
+          .replace(/^[-•*]\s*/, '')
+          .replace(/^\w+\s*Impact:\s*/, '')
+          .replace(/^\w+\s*Assessment:\s*/, '')
+          .trim();
+        
+        if (cleanValue.length > 0) {
+          factors[cleanKey] = cleanValue;
+        }
       }
-    }
-    // Handle range format like "₹26,00,000 - ₹30,00,000"
-    else if (priceText.includes(' - ')) {
-      const rangeParts = priceText.split(' - ');
-      if (rangeParts.length === 2) {
-        minPrice = rangeParts[0].trim();
-        maxPrice = rangeParts[1].trim();
+    });
+  }
+  
+  // If no factors from object or factors are incomplete, parse from market analysis text
+  if (Object.keys(factors).length === 0 && marketAnalysisText) {
+    const lines = marketAnalysisText.split('\n');
+    let inFactorsSection = false;
+    
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      
+      // Check if we've entered the Key Pricing Factors section
+      if (line.toLowerCase().includes('key pricing factors') ||
+          line.toLowerCase().includes('pricing factors:')) {
+        inFactorsSection = true;
+        continue;
       }
-    }
-    // Single price - use as both min and max
-    else {
-      minPrice = maxPrice = priceText;
+      
+      // Check if we've left the factors section (new major section)
+      if (inFactorsSection && line.match(/^\*\*[^*]+\*\*/) && 
+          !line.toLowerCase().includes('factor') && 
+          !line.toLowerCase().includes('pricing')) {
+        break;
+      }
+      
+      // Parse factor lines in various formats
+      if (inFactorsSection && line) {
+        // Format: "- Factor Name: Description"
+        let match = line.match(/^-\s*([^:]+):\s*(.+)$/);
+        if (match) {
+          const factorName = match[1].trim()
+            .replace(/\s+Impact$/, '')
+            .replace(/\s+Assessment$/, '')
+            .replace(/\s+Factors?$/, '');
+          const factorDesc = match.trim();
+          
+          if (factorDesc.length > 10) { // Only add if description is meaningful
+            factors[factorName] = factorDesc;
+          }
+          continue;
+        }
+        
+        // Format: "Factor Name: Description" (without dash)
+        match = line.match(/^([A-Za-z][^:-]+):\s*(.+)$/);
+        if (match && !match[1].includes('ESTIMATED') && !match[1].includes('MARKET')) {
+          const factorName = match[1].trim()
+            .replace(/\s+Impact$/, '')
+            .replace(/\s+Assessment$/, '')
+            .replace(/\s+Factors?$/, '');
+          const factorDesc = match.trim();
+          
+          if (factorDesc.length > 10) {
+            factors[factorName] = factorDesc;
+          }
+        }
+      }
     }
   }
   
-  return { minPrice, maxPrice };
+  // If still no factors, try to extract from any part of the text
+  if (Object.keys(factors).length === 0 && marketAnalysisText) {
+    const allLines = marketAnalysisText.split('\n');
+    
+    allLines.forEach(line => {
+      const trimmedLine = line.trim();
+      
+      // Look for any line with factor-like patterns
+      const factorPatterns = [
+        /^-\s*(Mileage[^:]*|Condition[^:]*|Market[^:]*|Location[^:]*|Age[^:]*|Depreciation[^:]*|Features?[^:]*):\s*(.+)$/i,
+        /^(Mileage[^:]*|Condition[^:]*|Market[^:]*|Location[^:]*|Age[^:]*|Depreciation[^:]*|Features?[^:]*):\s*(.+)$/i
+      ];
+      
+      factorPatterns.forEach(pattern => {
+        const match = trimmedLine.match(pattern);
+        if (match && match[2] && match[2].trim().length > 10) {
+          const factorName = match[1].trim()
+            .replace(/\s+Impact$/, '')
+            .replace(/\s+Assessment$/, '')
+            .replace(/\s+Factors?$/, '');
+          const factorDesc = match.trim();
+          
+          factors[factorName] = factorDesc;
+        }
+      });
+    });
+  }
+  
+  console.log('Final parsed factors:', factors);
+  return factors;
 };
+
 
 // Enhanced market analysis parsing
 // Enhanced market analysis parsing (excludes Key Pricing Factors)
@@ -266,50 +399,7 @@ const parseMarketAnalysis = (text) => {
 };
 
 // Enhanced function to parse key pricing factors from the response
-const parseKeyPricingFactors = (text) => {
-  if (!text) return {};
-  
-  const factors = {};
-  const lines = text.split('\n');
-  let inFactorsSection = false;
-  
-  lines.forEach(line => {
-    const trimmedLine = line.trim();
-    
-    // Check if we've entered the Key Pricing Factors section
-    if (trimmedLine.toLowerCase().includes('key pricing factors')) {
-      inFactorsSection = true;
-      return;
-    }
-    
-    // Check if we've left the factors section (new section started)
-    if (inFactorsSection && trimmedLine.match(/^\*\*(.*?)\*\*/) && 
-        !trimmedLine.toLowerCase().includes('factors')) {
-      inFactorsSection = false;
-      return;
-    }
-    
-    // Parse factor lines in the format "- Factor Name: Description"
-    if (inFactorsSection && trimmedLine.match(/^-?\s*([^:]+):\s*(.+)$/)) {
-      const match = trimmedLine.match(/^-?\s*([^:]+):\s*(.+)$/);
-      if (match) {
-        const factorName = match[1].trim();
-        const factorDescription = match[1].trim();
-        
-        // Clean up factor name
-        const cleanFactorName = factorName
-          .replace(/^-\s*/, '')
-          .replace(/Impact$/, '')
-          .replace(/Assessment$/, '')
-          .trim();
-        
-        factors[cleanFactorName] = factorDescription;
-      }
-    }
-  });
-  
-  return factors;
-};
+
 
 
 
@@ -526,7 +616,7 @@ const parseKeyPricingFactors = (text) => {
           </div>
         )}
 
-       {/* Results Section */}
+      {/* Results Section */}
 {estimationResult && (
   <div className="results-section">
     <div className="results-header">
@@ -547,43 +637,60 @@ const parseKeyPricingFactors = (text) => {
       </div>
     </div>
 
-    {/* Price Range Card */}
-    <div className="price-range-card">
-      <h3 className="price-range-title">
-        <span className="price-icon">💰</span>
-        Estimated Price Range
-      </h3>
-      <div className="price-range-content">
-        {(() => {
-          const { minPrice, maxPrice } = parseEstimatedPrice(estimationResult);
-          
-          if (minPrice && maxPrice && minPrice !== maxPrice) {
-            return (
-              <div className="price-display">
-                {minPrice} - {maxPrice}
-              </div>
-            );
-          } else if (minPrice) {
-            return (
-              <div className="price-display">
-                {minPrice}
-              </div>
-            );
-          } else {
-            return (
-              <div className="price-display">
-                {estimationResult.estimated_price}
-              </div>
-            );
-          }
-        })()}
-        <div className="price-confidence">
-          <span className="confidence-label">AI-Powered Market Analysis</span>
-        </div>
-      </div>
-    </div>
+    {/* Fixed Price Range Card */}
+    {/* Enhanced Price Range Card */}
+<div className="price-range-card">
+  <h3 className="price-range-title">
+    <span className="price-icon">💰</span>
+    Estimated Price Range
+  </h3>
+  <div className="price-range-content">
+    {(() => {
+      const { minPrice, maxPrice, currency } = parseEstimatedPrice(estimationResult);
+      
+      console.log('Displaying prices:', { minPrice, maxPrice }); // Debug log
+      
+      if (minPrice && maxPrice) {
+        // Ensure both prices have currency symbols
+        const displayMinPrice = minPrice.includes(currency) ? minPrice : `${currency}${minPrice}`;
+        const displayMaxPrice = maxPrice.includes(currency) ? maxPrice : `${currency}${maxPrice}`;
+        
+        if (minPrice === maxPrice) {
+          return (
+            <div className="price-display single-price">
+              {displayMinPrice}
+            </div>
+          );
+        } else {
+          return (
+            <div className="price-display range-price">
+              <span className="min-price">{displayMinPrice}</span>
+              <span className="price-separator"> - </span>
+              <span className="max-price">{displayMaxPrice}</span>
+            </div>
+          );
+        }
+      } else {
+        // Fallback display
+        let fallbackPrice = estimationResult.estimated_price?.toString() || 'Price not available';
+        
+        // Add currency if missing
+        if (fallbackPrice !== 'Price not available' && !fallbackPrice.match(/[₹$€£¥]/)) {
+          fallbackPrice = `$${fallbackPrice}`;
+        }
+        
+        return (
+          <div className="price-display fallback-price">
+            {fallbackPrice}
+          </div>
+        );
+      }
+    })()}
+    
+  </div>
+</div>
 
-    {/* Market Analysis (excludes Key Pricing Factors) */}
+    {/* Market Analysis */}
     <div className="market-analysis-section">
       <h3 className="analysis-title">
         <span className="analysis-icon">📈</span>
@@ -620,40 +727,37 @@ const parseKeyPricingFactors = (text) => {
       </div>
     </div>
 
-    {/* Key Pricing Factors - Only displayed here */}
+    {/* Fixed Key Pricing Factors */}
     {(() => {
-      // Try to parse from market_analysis first, then fall back to factors
-      const parsedFactors = parseKeyPricingFactors(estimationResult.market_analysis);
-      const factorsToShow = Object.keys(parsedFactors).length > 0 ? 
-        parsedFactors : 
-        (estimationResult.factors && Object.keys(estimationResult.factors).length > 0 ? estimationResult.factors : null);
+      const parsedFactors = parseKeyPricingFactors(
+        estimationResult.market_analysis, 
+        estimationResult.factors
+      );
       
-      return factorsToShow && Object.keys(factorsToShow).length > 0 ? (
+      console.log('Parsed factors:', parsedFactors); // Debug log
+      
+      return Object.keys(parsedFactors).length > 0 ? (
         <div className="factors-section">
           <h3 className="factors-title">
             <span className="factors-icon">⚖️</span>
             Key Pricing Factors
           </h3>
           <div className="factors-grid">
-            {Object.entries(factorsToShow).map(([factor, description]) => (
-              <div key={factor} className="factor-card">
+            {Object.entries(parsedFactors).map(([factor, description], index) => (
+              <div key={index} className="factor-card">
                 <div className="factor-header">
                   <span className="factor-icon">
                     {factor.toLowerCase().includes('mileage') ? '🛣️' :
                      factor.toLowerCase().includes('condition') ? '⚙️' :
-                     factor.toLowerCase().includes('demand') ? '📈' :
+                     factor.toLowerCase().includes('demand') || factor.toLowerCase().includes('market') ? '📈' :
                      factor.toLowerCase().includes('location') ? '🌍' :
                      factor.toLowerCase().includes('age') || factor.toLowerCase().includes('depreciation') ? '📅' :
                      factor.toLowerCase().includes('features') ? '✨' :
                      '🔧'}
                   </span>
-                  <h4 className="factor-name">
-                    {factor.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
-                  </h4>
+                  <h4 className="factor-name">{factor}</h4>
                 </div>
-                <p className="factor-description">
-                  {description.replace(/^-\s*/, '').trim()}
-                </p>
+                <p className="factor-description">{description}</p>
               </div>
             ))}
           </div>
@@ -662,6 +766,7 @@ const parseKeyPricingFactors = (text) => {
     })()}
   </div>
 )}
+
 
 
         

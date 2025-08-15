@@ -1,12 +1,11 @@
 import os
+import re
 from langchain.chat_models import ChatOpenAI
 from langchain.schema import HumanMessage, SystemMessage
 from dotenv import load_dotenv
 from ..models.schemas import PriceEstimateRequest, PriceEstimateResponse, CarDetails
 from ..utils.prompts import CAR_PRICE_ESTIMATION_PROMPT
-import re
 
-# Load environment variables
 load_dotenv()
 
 class PriceEstimationService:
@@ -16,7 +15,7 @@ class PriceEstimationService:
             model="gpt-4o",
             api_key=OPENAI_API_KEY,
             temperature=0.2,
-            max_tokens=1500
+            max_tokens=2000
         )
     
     def estimate_price(self, request: PriceEstimateRequest) -> PriceEstimateResponse:
@@ -35,13 +34,16 @@ class PriceEstimationService:
             response = self.llm.invoke(messages)
             estimation_text = response.content
             
+            print(f"AI Response: {estimation_text}")  # Debug log
+            
             # Parse the response
             price_range = self._extract_price_range(estimation_text)
+            estimated_price = self._extract_estimated_price(estimation_text)
             factors = self._extract_factors(estimation_text)
-            market_analysis = self._extract_market_analysis(estimation_text)
+            market_analysis = estimation_text  # Return full text for frontend parsing
             
             return PriceEstimateResponse(
-                estimated_price=self._extract_estimated_price(estimation_text),
+                estimated_price=estimated_price,
                 price_range=price_range,
                 factors=factors,
                 market_analysis=market_analysis
@@ -65,7 +67,8 @@ class PriceEstimationService:
         if car.year:
             details.append(f"Year: {car.year}")
         if car.mileage:
-            details.append(f"Mileage: {car.mileage} miles")
+            mileage_unit = getattr(car, 'mileage_unit', 'miles')
+            details.append(f"Mileage: {car.mileage} {mileage_unit}")
         if car.engine:
             details.append(f"Engine: {car.engine}")
         if car.transmission:
@@ -76,82 +79,121 @@ class PriceEstimationService:
             details.append(f"Condition: {car.condition}")
         if car.features:
             details.append(f"Features: {car.features}")
+        if car.location:
+            details.append(f"Location: {car.location}")
         
         details.append(f"Additional Details: {car.raw_description}")
         
         return "\n".join(details)
     
-    def _extract_estimated_price(self, text: str) -> str:
-        """Extract the main estimated price from response"""
-        price_patterns = [
-            r'\$[\d,]+',
-            r'₹[\d,]+',
-            r'£[\d,]+',
-            r'€[\d,]+'
-        ]
-        
-        for pattern in price_patterns:
-            matches = re.findall(pattern, text)
-            if matches:
-                return matches[0] if len(matches) == 1 else f"{matches} - {matches[-1]}"
-        
-        return "Price estimate included in analysis"
-    
     def _extract_price_range(self, text: str) -> dict:
-        """Extract minimum and maximum price range"""
+        """Extract minimum and maximum price range - fixed to avoid Pydantic errors"""
         try:
-            range_pattern = r'\$(\d{1,3}(?:,\d{3})*)\s*[-to]\s*\$(\d{1,3}(?:,\d{3})*)'
-            matches = re.search(range_pattern, text, re.IGNORECASE)
+            # Look for the exact format we specified in the prompt
+            min_pattern = r'Minimum Value:\s*([₹$€£¥C\$A\$]?[\d,]+)'
+            max_pattern = r'Maximum Value:\s*([₹$€£¥C\$A\$]?[\d,]+)'
             
-            if matches:
-                min_price = float(matches.group(1).replace(',', ''))
-                max_price = float(matches.group(2).replace(',', ''))
-                return {"min": min_price, "max": max_price}
+            min_match = re.search(min_pattern, text, re.IGNORECASE)
+            max_match = re.search(max_pattern, text, re.IGNORECASE)
             
-            price_pattern = r'\$(\d{1,3}(?:,\d{3})*)'
-            prices = re.findall(price_pattern, text)
+            if min_match and max_match:
+                min_price_str = min_match.group(1).strip()
+                max_price_str = max_match.group(1).strip()
+                
+                # Extract numeric values only (remove currency symbols and commas)
+                min_numeric = float(re.sub(r'[₹$€£¥C\$A\$,\s]', '', min_price_str))
+                max_numeric = float(re.sub(r'[₹$€£¥C\$A\$,\s]', '', max_price_str))
+                
+                return {
+                    "min": min_numeric,  # Numeric value for calculations
+                    "max": max_numeric,  # Numeric value for calculations
+                    "min_display": min_price_str,  # Formatted string for display
+                    "max_display": max_price_str   # Formatted string for display
+                }
             
-            if len(prices) >= 2:
-                prices_float = [float(p.replace(',', '')) for p in prices]
-                return {"min": min(prices_float), "max": max(prices_float)}
+            # Fallback: look for any price patterns and sort them
+            price_patterns = [
+                r'([₹$€£¥][\d,]+)',
+                r'(\$[\d,]+)',
+                r'(₹[\d,]+)',
+                r'(€[\d,]+)',
+                r'(£[\d,]+)'
+            ]
+            
+            all_prices = []
+            for pattern in price_patterns:
+                matches = re.findall(pattern, text)
+                for match in matches:
+                    # Clean numeric value for sorting
+                    numeric_value = float(re.sub(r'[₹$€£¥,\s]', '', match))
+                    if numeric_value > 0:  # Only valid prices
+                        all_prices.append({
+                            "text": match,
+                            "value": numeric_value
+                        })
+            
+            if len(all_prices) >= 2:
+                # Sort by numeric value
+                all_prices.sort(key=lambda x: x["value"])
+                
+                return {
+                    "min": all_prices[0]["value"],
+                    "max": all_prices[-1]["value"],
+                    "min_display": all_prices["text"],
+                    "max_display": all_prices[-1]["text"]
+                }
             
         except Exception as e:
             print(f"Error extracting price range: {e}")
         
-        return {"min": 0, "max": 0}
+        # Return default values if parsing fails
+        return {
+            "min": 0, 
+            "max": 0,
+            "min_display": "Not available",
+            "max_display": "Not available"
+        }
+    
+    def _extract_estimated_price(self, text: str) -> str:
+        """Extract the most likely price"""
+        # Look for "Most Likely Price" first
+        likely_pattern = r'Most Likely Price:\s*([₹$€£¥C\$A\$]?[\d,]+)'
+        likely_match = re.search(likely_pattern, text, re.IGNORECASE)
+        
+        if likely_match:
+            return likely_match.group(1).strip()
+        
+        # Fallback to any price found
+        price_patterns = [
+            r'([₹$€£¥][\d,]+)',
+            r'(\$[\d,]+)',
+            r'(₹[\d,]+)'
+        ]
+        
+        for pattern in price_patterns:
+            match = re.search(pattern, text)
+            if match:
+                return match.group(1).strip()
+        
+        return "Price estimate included in analysis"
     
     def _extract_factors(self, text: str) -> dict:
         """Extract key factors affecting price"""
         factors = {}
-        lines = text.split('\n')
         
-        factor_keywords = ['depreciation', 'mileage', 'condition', 'demand', 'features', 'location', 'market']
+        # Look for the KEY PRICING FACTORS section
+        factors_section_match = re.search(r'\*\*KEY PRICING FACTORS:\*\*(.*?)(?:\*\*|$)', text, re.DOTALL | re.IGNORECASE)
         
-        for line in lines:
-            for keyword in factor_keywords:
-                if keyword.lower() in line.lower() and ':' in line:
-                    factors[keyword] = line.strip()
-                    break
-        
-        if not factors:
-            factors = {"analysis": "Detailed factors included in market analysis"}
-        
-        return factors
-    
-    def _extract_market_analysis(self, text: str) -> str:
-        """Extract market analysis section"""
-        lines = text.split('\n')
-        market_lines = []
-        capture = False
-        
-        for line in lines:
-            if any(keyword in line.lower() for keyword in ['market', 'trend', 'analysis', 'demand']):
-                capture = True
+        if factors_section_match:
+            factors_text = factors_section_match.group(1)
             
-            if capture:
-                market_lines.append(line.strip())
+            # Parse individual factors
+            factor_lines = re.findall(r'-\s*([^:]+):\s*([^\n-]+)', factors_text)
+            
+            for factor_name, factor_desc in factor_lines:
+                clean_name = factor_name.strip()
+                clean_desc = factor_desc.strip()
+                if clean_name and clean_desc:
+                    factors[clean_name] = clean_desc
         
-        if market_lines:
-            return '\n'.join(market_lines)
-        else:
-            return text
+        return factors if factors else {"analysis": "Detailed factors included in market analysis"}

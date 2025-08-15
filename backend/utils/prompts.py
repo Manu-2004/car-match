@@ -89,18 +89,20 @@ You are a professional automotive appraiser with 20+ years of international expe
 
 Vehicle Details: {car_details}
 
-IMPORTANT: Determine the appropriate currency based on the location provided. Use USD as default if location is unclear.
+IMPORTANT: 
+1. Determine the appropriate currency based on the location provided. Use USD as default if location is unclear.
+2. Provide EXACT minimum and maximum price values for easy parsing.
 
 Analyze these key factors and provide a detailed response in this EXACT format:
 
 **ESTIMATED PRICE RANGE:**
-Most Likely Price: [Currency Symbol][Amount]
-Minimum Value: [Currency Symbol][Amount]
-Maximum Value: [Currency Symbol][Amount]
+Minimum Value: [Currency Symbol][Exact Amount]
+Maximum Value: [Currency Symbol][Exact Amount]
+Most Likely Price: [Currency Symbol][Exact Amount]
 
 **MARKET TRENDS ANALYSIS:**
 • Current market demand for this model
-• Seasonal pricing factors
+• Seasonal pricing factors  
 • Supply availability in local market
 
 **DEMAND AND SUPPLY FACTORS:**
@@ -146,7 +148,11 @@ Currency Guidelines:
 - Japan: JPY (¥)
 - Other locations: Use appropriate local currency or USD as fallback
 
-Keep all bullet points concise (1-2 sentences max). Be specific with pricing and provide realistic estimates.
+CRITICAL: 
+- Use exact numeric values (e.g., $25,000 not $25K)
+- Always include currency symbols
+- Provide realistic price ranges (10-20% difference between min/max)
+- Keep all bullet points concise (1-2 sentences max)
 """
 
 
