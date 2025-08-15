@@ -155,19 +155,17 @@ const CompareCars = () => {
   // Parse and format comparison result
   // Parse and format comparison result
 // Parse and format comparison result
+// Enhanced parsing function for recommendations
 const formatComparisonResult = (text) => {
   if (!text) return [];
   
-  // Split by numbered sections
   const sections = text.split(/\*\*\d+\./).filter(section => section.trim());
   
-  // Also handle **Final Recommendation** section
   const finalRecIndex = text.indexOf('**Final Recommendation**');
   if (finalRecIndex !== -1) {
     const beforeFinal = text.substring(0, finalRecIndex);
     const finalSection = text.substring(finalRecIndex);
     
-    // Split the before part and add the final section
     const beforeSections = beforeFinal.split(/\*\*\d+\./).filter(section => section.trim());
     beforeSections.push(finalSection);
     
@@ -178,13 +176,11 @@ const formatComparisonResult = (text) => {
       let title = '';
       let content = lines;
       
-      // Extract title
       const firstLine = lines[0];
       if (firstLine.includes('**')) {
         title = firstLine.replace(/\*\*/g, '').trim();
         content = lines.slice(1);
       } else {
-        // Try to extract section title from content
         const titleMatch = section.match(/([^*\n]+?)(?:\n|$)/);
         if (titleMatch) {
           title = titleMatch[1].trim();
@@ -192,32 +188,40 @@ const formatComparisonResult = (text) => {
         }
       }
       
-      // Clean up title
       title = title.replace(/^\d+\.\s*/, '').trim();
+      
+      // Check if this is the final recommendation section
+      const isFinalRec = title.toLowerCase().includes('final recommendation') || 
+                        title.toLowerCase().includes('recommendation');
       
       return {
         id: index,
         title: title || `Section ${index + 1}`,
-        content: content.filter(line => line.trim())
+        content: content.filter(line => line.trim()),
+        isFinalRecommendation: isFinalRec
       };
     }).filter(Boolean);
   }
   
-  // Fallback to original logic
   return sections.map((section, index) => {
     const lines = section.split('\n').filter(line => line.trim());
     if (lines.length === 0) return null;
     
-    const title = lines[0]?.replace(/\*\*/g, '').replace(/^\d+\.\s*/, '').trim() || `Section ${index + 1}`;
+    const title = lines?.replace(/\*\*/g, '').replace(/^\d+\.\s*/, '').trim() || `Section ${index + 1}`;
     const content = lines.slice(1);
     
     return {
       id: index,
       title: title,
-      content: content
+      content: content,
+      isFinalRecommendation: false
     };
   }).filter(Boolean);
 };
+
+  
+  // Fallback to original logic
+  
 
 
   return (
@@ -577,25 +581,41 @@ const formatComparisonResult = (text) => {
 
     <div className="detailed-comparison">
   {formatComparisonResult(comparisonResult.comparison).map(section => (
-    <div key={section.id} className="comparison-section">
-      <h3 className="section-title">{section.title}</h3>
+    <div 
+      key={section.id} 
+      className={`comparison-section ${section.isFinalRecommendation ? 'final-recommendation-section' : ''}`}
+    >
+      <h3 className={`section-title ${section.isFinalRecommendation ? 'final-recommendation-title' : ''}`}>
+        {section.isFinalRecommendation && <span className="recommendation-crown"></span>}
+        {section.title}
+      </h3>
       <div className="section-content">
         {section.content.map((line, lineIndex) => {
-          // Check if line contains car names to highlight them
           const isCarName = (car1.make && line.includes(car1.make)) || 
                            (car2.make && line.includes(car2.make)) ||
                            line.match(/^[A-Z][a-zA-Z]+\s+[A-Z][a-zA-Z]+\s+\d{4}:/);
           
+          const isUseCaseHeading = line.match(/^(Family Use|Daily Commuting|Performance|Budget|Long-term Investment):/);
+          const isOverallWinner = line.toLowerCase().startsWith('overall winner:');
+          
           return (
             <div key={lineIndex} className="comparison-point">
               {line.startsWith('•') || line.startsWith('-') ? (
-                <div className="bullet-point">{line}</div>
+                <div className={`bullet-point ${section.isFinalRecommendation ? 'final-rec-bullet' : ''}`}>
+                  {line}
+                </div>
               ) : isCarName ? (
                 <div className="car-name-header">{line}</div>
               ) : line.toLowerCase().startsWith('winner:') ? (
                 <div className="winner-text">{line}</div>
+              ) : isUseCaseHeading ? (
+                <div className="use-case-heading">{line}</div>
+              ) : isOverallWinner ? (
+                <div className="overall-winner">{line}</div>
               ) : (
-                <div className="comparison-text">{line}</div>
+                <div className={`comparison-text ${section.isFinalRecommendation ? 'final-rec-text' : ''}`}>
+                  {line}
+                </div>
               )}
             </div>
           );
@@ -604,6 +624,7 @@ const formatComparisonResult = (text) => {
     </div>
   ))}
 </div>
+
 
 
     
