@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 import os
 
-from .routes import compare
+from .routes import compare, price
 
 # Load environment variables
 load_dotenv()
@@ -26,6 +26,10 @@ app.add_middleware(
 
 # Include only comparison router
 app.include_router(compare.router)
+
+
+app.include_router(price.router)
+
 
 @app.get("/")
 async def root():

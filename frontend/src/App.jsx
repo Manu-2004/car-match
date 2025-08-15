@@ -4,6 +4,7 @@ import Navbar from './components/Navbar.jsx';
 import Homepage from './components/pages/Homepage.jsx';
 import CompareCars from './components/pages/CompareCars.jsx';
 import './App.css';
+import PriceEstimator from './components/pages/PriceEstimator.jsx';
 
 const App = () => {
   const [currentPage, setCurrentPage] = useState('home');
@@ -19,14 +20,7 @@ const App = () => {
       case 'compare':
         return <CompareCars />;
       case 'price-estimator':
-        return (
-          <div className="page-container">
-            <div className="coming-soon">
-              <h2>Price Estimator</h2>
-              <p>Coming Soon...</p>
-            </div>
-          </div>
-        );
+        return <PriceEstimator/>;
       default:
         return <Homepage onNavigation={handleNavigation} />;
     }

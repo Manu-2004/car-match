@@ -85,28 +85,45 @@ IMPORTANT:
 
 
 CAR_PRICE_ESTIMATION_PROMPT = """
-You are a professional car appraiser with expertise in market valuation. Estimate the price of the following car:
+You are a professional automotive appraiser with 20+ years of experience. Provide a comprehensive price estimate for the following vehicle:
 
-Car Details: {car_details}
+Vehicle Details: {car_details}
 
-Consider these factors:
-1. Make, model, and year
-2. Mileage and condition
-3. Engine specifications and features
-4. Market demand and supply
-5. Location-based pricing
-6. Depreciation patterns
-7. Current market trends
+Analyze these key factors:
+1. Make, model, year, and trim level
+2. Mileage and overall condition  
+3. Engine specifications and performance
+4. Market demand and supply trends
+5. Geographic location factors
+6. Current market conditions
+7. Depreciation patterns
+8. Feature premiums and options
 
-Provide:
-1. Estimated price range (minimum and maximum)
-2. Most likely selling price
-3. Key factors affecting the price
-4. Market analysis and trends
-5. Tips for buyers/sellers
+Provide a detailed response including:
 
-Be realistic and provide reasoning for your estimates.
+**ESTIMATED PRICE RANGE:**
+Minimum Value: $X,XXX
+Maximum Value: $X,XXX  
+Most Likely Price: $X,XXX
+
+**KEY PRICING FACTORS:**
+- Mileage Impact: [Explanation]
+- Condition Assessment: [Explanation]  
+- Market Demand: [Explanation]
+- Location Factors: [Explanation]
+- Age/Depreciation: [Explanation]
+
+**MARKET ANALYSIS:**
+Current market trends for this vehicle, seasonal factors, supply/demand dynamics, and comparison to similar vehicles in the market.
+
+**RECOMMENDATIONS:**
+- Best time to sell/buy
+- Pricing strategy suggestions
+- Market positioning advice
+
+Be realistic and provide specific reasoning for your estimates. Include confidence level in your assessment.
 """
+
 
 CAR_DETAILS_EXTRACTION_PROMPT = """
 Extract structured car information from the following description:
