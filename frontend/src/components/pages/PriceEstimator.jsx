@@ -590,7 +590,7 @@ const parseMarketAnalysis = (text) => {
                     onChange={(e) => setCarDetails({...carDetails, fuel_type: e.target.value})}
                   >
                     <option value="">Select Fuel Type</option>
-                    <option value="Gasoline">Gasoline</option>
+                    <option value="Petrol">Petrol</option>
                     <option value="Diesel">Diesel</option>
                     <option value="Electric">Electric</option>
                     <option value="Hybrid">Hybrid</option>
@@ -692,7 +692,7 @@ const parseMarketAnalysis = (text) => {
   <div className="results-section">
     <div className="results-header">
       <h2 className="results-main-title">
-        <span className="results-icon">💎</span>
+        
         Price Estimation Results
       </h2>
     </div>
