@@ -2,8 +2,8 @@ import os
 from langchain.chat_models import ChatOpenAI
 from langchain.schema import HumanMessage, SystemMessage
 from dotenv import load_dotenv
-from ..models.schemas import CompareRequest, CompareResponse, CarDetails
-from ..utils.prompts import CAR_COMPARISON_PROMPT, CAR_DETAILS_EXTRACTION_PROMPT
+from models.schemas import CompareRequest, CompareResponse, CarDetails
+from utils.prompts import CAR_COMPARISON_PROMPT, CAR_DETAILS_EXTRACTION_PROMPT
 import json
 import re
 
