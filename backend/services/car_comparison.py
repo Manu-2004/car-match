@@ -1,5 +1,6 @@
 import os
-from langchain.chat_models import ChatOpenAI
+from langchain_community.chat_models import ChatOpenAI
+
 from langchain.schema import HumanMessage, SystemMessage
 from dotenv import load_dotenv
 from models.schemas import CompareRequest, CompareResponse, CarDetails
