@@ -43,5 +43,7 @@ async def health_check():
     }
 
 if __name__ == "__main__":
-    import uvicorn
+    import uvicorn, os
+    from main import app   # or wherever your FastAPI app is defined
     uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("PORT", 8000)))
+

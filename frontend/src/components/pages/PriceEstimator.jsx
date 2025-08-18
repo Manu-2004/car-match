@@ -70,7 +70,7 @@ const PriceEstimator = () => {
         }
       };
 
-      const response = await fetch('http://localhost:8000/api/price/estimate', {
+      const response = await fetch('https://car-match-backend.up.railway.app/api/price/estimate', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
