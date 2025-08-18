@@ -99,7 +99,7 @@ const CompareCars = () => {
     // DEBUG: Log the request body
     console.log('Request body:', JSON.stringify(requestBody, null, 2));
 
-    const response = await fetch('https://car-match-backend.up.railway.app/api/compare/', {
+    const response = await fetch('http://localhost:8000/api/compare/', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
