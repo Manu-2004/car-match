@@ -2,7 +2,7 @@
 builder = "nixpacks"
 
 [deploy]
-startCommand = "python -m backend.main"
+startCommand = "python -m main"
 
 [variables]
 PYTHONPATH = "/app"
