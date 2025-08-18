@@ -4,8 +4,8 @@ from langchain_openai import ChatOpenAI
 
 from langchain.schema import HumanMessage, SystemMessage
 from dotenv import load_dotenv
-from models.schemas import PriceEstimateRequest, PriceEstimateResponse, CarDetails
-from utils.prompts import CAR_PRICE_ESTIMATION_PROMPT
+from backend.models.schemas import PriceEstimateRequest, PriceEstimateResponse, CarDetails
+from backend.utils.prompts import CAR_PRICE_ESTIMATION_PROMPT
 
 # Load environment variables
 load_dotenv()

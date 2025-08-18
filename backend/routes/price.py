@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException
-from models.schemas import PriceEstimateRequest, PriceEstimateResponse
-from services.price_estimation import PriceEstimationService
+from backend.models.schemas import PriceEstimateRequest, PriceEstimateResponse
+from backend.services.price_estimation import PriceEstimationService
 
 router = APIRouter(prefix="/api/price", tags=["Price Estimation"])
 

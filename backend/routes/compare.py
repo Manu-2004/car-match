@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException
-from models.schemas import CompareRequest, CompareResponse
-from services.car_comparison import CarComparisonService
+from backend.models.schemas import CompareRequest, CompareResponse
+
+from backend.services.car_comparison import CarComparisonService
 
 router = APIRouter(prefix="/api/compare", tags=["Car Comparison"])
 
