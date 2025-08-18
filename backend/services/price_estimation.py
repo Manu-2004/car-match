@@ -1,6 +1,6 @@
 import os
 import re
-from langchain_community.chat_models import ChatOpenAI
+from langchain_openai import ChatOpenAI
 
 from langchain.schema import HumanMessage, SystemMessage
 from dotenv import load_dotenv
